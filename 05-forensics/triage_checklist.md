@@ -5,6 +5,7 @@ A structured, step-by-step triage guide for CTF forensics challenges.
 ---
 
 ## Quick Navigation by Artifact Type
+0. [Phase 0: One-Liner Flag Grabbers (Cheatcodes)](#0-one-liner-flag-grabbers-cheatcodes)
 1. [Phase 1: Universal 60-Second Initial Triage](#1-universal-60-second-initial-triage)
 2. [Phase 2: Images and Steganography](#2-images-and-steganography)
 3. [Phase 3: Corrupted Files and Header Repair](#3-corrupted-files-and-header-repair)
@@ -12,6 +13,43 @@ A structured, step-by-step triage guide for CTF forensics challenges.
 5. [Phase 5: Raw Bitstreams and Encoding (1s, 0s, Base64)](#5-raw-bitstreams-and-encoding)
 6. [Phase 6: Network Captures (Wireshark and Tshark)](#6-network-captures-pcap)
 7. [Phase 7: Memory Forensics (Volatility 3)](#7-memory-forensics-volatility-3)
+8. [Phase 8: Deep Multi-Layer Reconnaissance](#8-deep-multi-layer-reconnaissance)
+
+---
+
+## 0. One-Liner Flag Grabbers (Cheatcodes)
+
+Run these automated one-liners first. If a challenge author left the flag unencrypted inside nested layers or non-standard encodings, these commands extract it immediately:
+
+### 1. Multi-Encoding String Sweep (ASCII, UTF-16LE, UTF-16BE)
+Standard `strings` only reads 7-bit ASCII. Windows memory dumps, Office files, and registry entries often store flags in 16-bit Little Endian (`l`). This scans all encodings at once:
+```bash
+for enc in s S b l B L; do strings -a -e $enc target_file; done | grep -iE 'flag\{|ctf\{'
+```
+
+### 2. Recursive Matryoshka Carve and Search
+Recursively extracts all nested archives inside images, documents, or binaries, then greps through all unpacked files:
+```bash
+binwalk -e -M target_file && grep -rnoaEi 'flag\{[^}]+\}' _*extracted/
+```
+
+### 3. Automated Stream Base64 Decoder
+Extracts every Base64 string from a file, attempts decoding in memory, and searches for flag headers:
+```bash
+grep -oE '[A-Za-z0-9+/]{20,}={0,2}' target_file | while read -r line; do echo "$line" | base64 -d 2>/dev/null; done | grep -iE 'flag\{|ctf\{'
+```
+
+### 4. Direct PCAP Flag Scanner
+Scans all packets in a capture file for plain or regex flag patterns without opening Wireshark:
+```bash
+tshark -r capture.pcap -Y 'frame matches "(?i)flag\{"' -T fields -e frame.number -e data.text -e text
+```
+
+### 5. Instant PNG LSB Flag Search
+Runs `zsteg` across all color channels and filters directly for flag formats:
+```bash
+zsteg -a image.png | grep -iE 'flag\{|ctf\{'
+```
 
 ---
 
@@ -217,4 +255,55 @@ python3 vol.py -f memory.raw windows.dumpfiles --virtaddr <VIRTUAL_ADDRESS>
 
 # 4. Extract Windows NTLM password hashes
 python3 vol.py -f memory.raw windows.hashdump
+```
+
+---
+
+## 8. Deep Multi-Layer Reconnaissance
+
+When initial triage fails and you suspect multi-layered or obfuscated artifacts:
+
+### 1. Entropy Analysis
+Identify whether data is plain, compressed, or encrypted:
+```bash
+binwalk -E target_file
+```
+- Flat line around 0.0 to 0.4: Empty or padded space.
+- Medium line around 0.5 to 0.7: Plain text or uncompressed executable code.
+- High flat line around 0.9 to 1.0: Compressed archive (zip, gz) or encrypted data.
+
+### 2. Deep File Carving (Foremost)
+Extracts all embedded files (PNG, JPG, PDF, ZIP) even when file system metadata is destroyed:
+```bash
+foremost -i target_file -o carved_output/
+```
+
+### 3. Bulk Extractor
+Scans raw unformatted disk, memory, or network dumps for URLs, email addresses, IP packets, and AES keys:
+```bash
+bulk_extractor -o bulk_out/ target_file
+```
+
+### 4. PDF Embedded File Extraction
+PDF challenges often embed secret files or scripts inside PDF stream objects:
+```bash
+# Check PDF metadata and embedded attachments
+pdfinfo target.pdf
+
+# List embedded files
+pdfdetach -list target.pdf
+
+# Extract all embedded files
+pdfdetach -saveall target.pdf
+```
+
+### 5. Encrypted ZIP / Archive Password Cracking
+When an extracted archive requires a password:
+```bash
+# Fast ZIP cracker using rockyou
+fcrackzip -u -D -p /usr/share/wordlists/rockyou.txt encrypted.zip
+
+# Or extract hash and crack using John the Ripper
+zip2john encrypted.zip > zip.hash
+john --wordlist=/usr/share/wordlists/rockyou.txt zip.hash
 ```
