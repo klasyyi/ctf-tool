@@ -1,91 +1,91 @@
-# Forensics 10-Minute Triage Checklist
+# Forensics Triage Checklist
 
-When given an unknown file in Forensics, execute this exact 10-minute triage protocol:
+Standard triage procedure for forensics artifacts:
 
 ```text
-[Step 1: File Type & Strings] ──> [Step 2: Hidden Files (binwalk/zsteg)] ──> [Step 3: Protocol/Hex Fix]
+[1. File Type and Strings] -> [2. Embedded Data Extraction] -> [3. Deep Protocol/Memory Analysis]
 ```
 
 ---
 
-## Step 1: Basic Inspection
+## 1. Initial File Inspection
 ```bash
 file target_file
-exiftool target_file                 # Check metadata, comments, GPS, author
+exiftool target_file
 strings -n 8 target_file | grep -iE 'flag|ctf|key|pass'
 ```
 
 ---
 
-## Step 2: Steganography (Images & Audio)
+## 2. Steganography Analysis
 
 ### PNG Images
 ```bash
-zsteg -a image.png                   # Checks all LSB channels (Solves 70% of PNG stego!)
-pngcheck -v image.png                # Checks for corrupted chunks / hidden IHDR data
+zsteg -a image.png                   # Inspects all LSB channels
+pngcheck -v image.png                # Checks chunk integrity and hidden IHDR data
 ```
 
 ### JPG Images
 ```bash
-binwalk -e image.jpg                 # Extract embedded zip/files
-steghide extract -sf image.jpg       # Hit Enter for empty passphrase, or crack with stegseek:
+binwalk -e image.jpg                 # Extracts embedded files
+steghide extract -sf image.jpg       # Extracts hidden data (empty password or wordlist)
 stegseek image.jpg /usr/share/wordlists/rockyou.txt
 ```
 
-### Audio (.wav / .mp3)
-1. Open in **Audacity**.
-2. Click the track dropdown (arrow next to audio name) $\rightarrow$ Switch from **Waveform** to **Spectrogram**.
-3. Look for text or QR code drawn directly into the high audio frequencies!
+### Audio Files (.wav, .mp3)
+1. Open file in Audacity.
+2. Select audio track dropdown menu next to the track name.
+3. Switch display from Waveform to Spectrogram to check for embedded text or QR codes.
 
 ---
 
-## Step 3: Magic Bytes / File Header Fix
-If `file target_file` says `data` or won't open in an image viewer, check the first 8 bytes with `xxd target_file | head`:
+## 3. Magic Bytes and File Header Repair
 
-| Format | Correct Magic Bytes (Hex) | ASCII |
+Inspect the first 8 bytes of an unrecognized file with `xxd target_file | head`:
+
+| File Type | Hex Signature | ASCII Representation |
 | :--- | :--- | :--- |
 | **PNG** | `89 50 4E 47 0D 0A 1A 0A` | `.PNG....` |
 | **JPG** | `FF D8 FF E0` or `FF D8 FF E1` | `....` |
-| **GIF** | `47 49 46 38 39 61` (GIF89a) | `GIF89a` |
+| **GIF** | `47 49 46 38 39 61` | `GIF89a` |
 | **ZIP / DOCX** | `50 4B 03 04` | `PK..` |
 | **PDF** | `25 50 44 46` | `%PDF` |
-| **ELF (Linux)**| `7F 45 4C 46` | `.ELF` |
+| **ELF (Linux Binary)** | `7F 45 4C 46` | `.ELF` |
 
-*Fixing via hexedit:*
-```bash
-hexedit target_file   # Overwrite the broken starting bytes and save with Ctrl+X
-```
+Edit corrupted header bytes using `hexedit target_file` and save with `Ctrl+X`.
 
 ---
 
-## Step 4: Network PCAP Analysis (Wireshark & Tshark)
+## 4. Network PCAP Analysis (Wireshark)
 
-### Top Wireshark Display Filters
+### Useful Display Filters
 ```text
-http.request.method == "POST"       # Look for submitted passwords or form data
-frame contains "flag"               # Case-sensitive search
-frame matches "(?i)flag\{"          # Case-insensitive regex search
-tcp.stream eq 0                     # Right-click packet -> Follow -> TCP Stream
-dns                                 # Check for DNS exfiltration (look at queried subdomains)
-icmp                                # Check ICMP data payload for exfiltrated bytes
+http.request.method == "POST"       # Inspect submitted forms and credentials
+frame contains "flag"               # Case-sensitive search across packets
+frame matches "(?i)flag\{"          # Case-insensitive regex match
+tcp.stream eq 0                     # Follow full TCP conversation stream
+dns                                 # Check for DNS tunneling or anomalous queries
+icmp                                # Inspect data fields in ping requests
 ```
 
-### Fast Extraction in Wireshark
-- **Export Transferred Files**: `File` $\rightarrow$ `Export Objects` $\rightarrow$ `HTTP...` (Downloads images, zip files, scripts transferred over plaintext).
-- **Credentials Extraction**: Search for `Authorization: Basic` (base64 decoded credentials).
+### File Extraction
+- Go to `File` > `Export Objects` > `HTTP...` to download files transferred over unencrypted connections.
+- Filter for `Authorization: Basic` to decode base64 HTTP authentication credentials.
 
 ---
 
-## Step 5: Memory Analysis (Volatility 3)
+## 5. Memory Dump Analysis (Volatility 3)
 ```bash
-# 1. Process tree / running commands
+# Process list and command-line arguments
 python3 vol.py -f memory.raw windows.pslist
 python3 vol.py -f memory.raw windows.cmdline
 
-# 2. File scanning & dumping
+# Scan for files on disk
 python3 vol.py -f memory.raw windows.filescan | grep -iE 'flag|desktop|secret'
-python3 vol.py -f memory.raw windows.dumpfiles --virtaddr <address_from_filescan>
 
-# 3. Dump password hashes
+# Dump identified file from virtual address
+python3 vol.py -f memory.raw windows.dumpfiles --virtaddr <address>
+
+# Extract password hashes
 python3 vol.py -f memory.raw windows.hashdump
 ```

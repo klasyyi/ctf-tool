@@ -1,71 +1,71 @@
 # Reverse Engineering Cheatsheet
 
-## 1. Fast Command-Line Recon (Try this before opening Ghidra!)
+## 1. Command-Line Analysis
 
+Inspect basic file metadata and strings:
 ```bash
 file ./binary
 strings -n 8 ./binary | grep -iE 'flag|pass|key|correct|wrong'
 ```
 
-### The `ltrace` Superpower
-If the binary uses standard library functions to check flags (like `strcmp`, `strncmp`, `memcmp`), `ltrace` intercepts and prints the comparison in plaintext!
+### Dynamic Tracing with ltrace
+If the binary uses standard C library comparison functions (`strcmp`, `strncmp`, `memcmp`), `ltrace` displays arguments in cleartext during execution:
 ```bash
 ltrace ./binary
-# Enter dummy password: "AAAA"
-# ltrace prints: strcmp("AAAA", "SUPER_SECRET_FLAG_12345") = -1
 ```
 
-### The `strace` Check
-If the binary reads a file or opens a socket:
+### System Call Tracing with strace
+Inspect file system calls, network connections, and input/output operations:
 ```bash
 strace ./binary 2>&1 | grep -iE 'open|read|flag'
 ```
 
 ---
 
-## 2. Ghidra Quick Guide
+## 2. Ghidra Analysis Workflow
 
-1. **Import & Analyze**:
-   - `File` $\rightarrow$ `Import File` $\rightarrow$ Select binary.
-   - Double-click to open in CodeBrowser.
-   - Click **Yes** when prompted to analyze (leave default options checked).
-2. **Finding the Main Logic**:
-   - In **Symbol Tree** (left pane) $\rightarrow$ Expand **Functions** $\rightarrow$ Click `main`.
-   - Inspect the **Decompile** window on the right.
-3. **Clean Up Code for Readability**:
-   - Press **`L`** on any confusing variable (e.g. `uVar1`) to rename it (e.g. `user_input`, `flag_buffer`).
-   - Press **`Ctrl + L`** to retype a variable (e.g. change `undefined4` to `char *`).
-4. **Search for Strings**:
-   - `Search` $\rightarrow$ `Program Text` or `Search` $\rightarrow$ `For Strings...`
-   - Double-click string $\rightarrow$ Right-click in Listing $\rightarrow$ `References` $\rightarrow$ `Show References to Address` to find where the string is used!
+1. Import and analyze:
+   - Go to `File` > `Import File` and select target binary.
+   - Open file in CodeBrowser and run default automatic analysis.
+2. Locate entry point:
+   - In `Symbol Tree` > `Functions`, locate and select `main`.
+   - Inspect the generated C code in the `Decompile` pane.
+3. Variable refactoring:
+   - Select variable and press `L` to rename.
+   - Press `Ctrl + L` to reassign data types (such as `char *` or `int`).
+4. Cross references:
+   - Search strings using `Search` > `For Strings...`.
+   - Right-click selected string in Listing, then select `References` > `Show References to Address`.
 
 ---
 
-## 3. Unpacking & Decompilation by File Type
+## 3. Unpacking and Decompilation
 
 ### UPX Packed Binaries
-Check if binary says `UPX!` in strings or file header:
+Check for UPX headers in strings:
 ```bash
 upx -d packed_binary -o unpacked_binary
 ```
 
-### Python Bytecode (`.pyc` files)
-If given a compiled Python file:
+### Python Bytecode (.pyc)
+Decompile compiled Python bytecode:
 ```bash
 # Using decompyle++ / pycdc:
-pycdc challenge.pyc > challenge_decompiled.py
+pycdc challenge.pyc > decompiled.py
 
-# Using uncompyle6 (for Python 2.7 - 3.8):
-uncompyle6 challenge.pyc > challenge_decompiled.py
+# Using uncompyle6 (for Python 2.7 to 3.8):
+uncompyle6 challenge.pyc > decompiled.py
 ```
 
 ### .NET / C# Executables (Windows PE)
-If `file` says: `PE32/PE64 executable ... Mono/.Net assembly`:
-- Open directly in **dnSpy** or **ILSpy** (Windows).
-- It will decompile back into nearly 100% original C# source code!
+If the binary is a .NET assembly, decompile with:
+- dnSpy
+- ILSpy
 
-### Java (`.jar` or `.class`)
-- Open in **JD-GUI** or **CFR**:
+These tools decompile assemblies directly into C# source code.
+
+### Java Bytecode (.class / .jar)
+Decompile Java archives using CFR or JD-GUI:
 ```bash
 java -jar cfr.jar target.class --outputdir ./decompiled/
 ```

