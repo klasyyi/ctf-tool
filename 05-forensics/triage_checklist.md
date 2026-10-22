@@ -99,7 +99,8 @@ When given a file containing raw ASCII `1` and `0` characters:
 ### Quick CyberChef Steps
 1. Open [CyberChef](https://gchq.github.io/CyberChef/).
 2. For text: Add `From Binary` operation (Byte length: 8).
-3. If output is unreadable, prepend `To Inverted Bitwise` or `XOR` with key `01`.
+3. For image rendering: Add `From Binary`, then add `Render Image` or click the Save icon in the Output pane to download as raw `.jpg` or `.png`.
+4. If output is unreadable, prepend `To Inverted Bitwise` or `XOR` with key `01`.
 
 ### Python Parser (Text and QR Code Reconstruction)
 ```python
@@ -121,4 +122,93 @@ if side * side == len(bits):
     img.putdata([0 if b == "1" else 255 for b in bits])
     img.save("reconstructed.png")
     print(f"Saved {side}x{side} image to reconstructed.png")
+```
+
+---
+
+## 7. Checksum and Integrity Verification
+
+### Verify Files Against Known Hash
+```bash
+# Check single file
+sha256sum target_file
+md5sum target_file
+
+# Search all files in current directory matching a target SHA-256 hash
+sha256sum * | grep "<TARGET_HASH>"
+
+# Windows equivalent in PowerShell / CMD
+certutil -hashfile target_file SHA256
+Get-FileHash target_file -Algorithm SHA256
+```
+
+---
+
+## 8. Compressed Archive Decompression
+
+When encountering unknown compressed archives:
+
+```bash
+# Gzip (.gz)
+gzip -dc file.gz > uncompressed_output
+
+# Tar archives (.tar, .tar.gz, .tgz)
+tar -xvf file.tar
+tar -xvzf file.tar.gz
+
+# 7-Zip (supports 7z, rar, zip, iso, dmg, bz2)
+7z x file.7z
+
+# Bzip2 (.bz2)
+bzip2 -d file.bz2
+
+# XZ (.xz)
+xz -d file.xz
+```
+
+---
+
+## 9. Recursive Base64 and Metadata Extraction
+
+### Automated Metadata Base64 Scanner
+Extract strings from metadata that match Base64 patterns (20 or more characters):
+```bash
+exiftool target_file | grep -oE '[A-Za-z0-9+/]{20,}={0,2}'
+```
+
+### Recursive Base64 Decoder (Python One-Liner)
+When data is encoded multiple times in Base64:
+```python
+import base64
+
+data = "Vm0wd2QyUXlVWGxWV0d4V1YwZDRWMVl3WkRSV01WbDNXa2M1VjFadGNGbFZNakExVjBaS2RHVkdXbGRYYlVaclVteHplRll5U2tWVWJHaG9UVlZ3VjFacWFFOVZNalZUVld4V1ExWnVRbFZXYmtwb1VqQmFZV1JIVmtOQlJFWjVXVmM1YWxkcmVGZFdSVXBvVmtSS1QyUkVUWGxUUmxweVZtMDFRMVp1..."
+
+while True:
+    try:
+        decoded = base64.b64decode(data).decode('utf-8')
+        data = decoded
+        print(f"Decoded layer: {data}")
+    except Exception:
+        print(f"Final plaintext: {data}")
+        break
+```
+
+---
+
+## 10. Tshark Fast Data Extraction from PCAP
+
+Extract transferred data directly from terminal without navigating Wireshark GUI:
+
+```bash
+# Extract HTTP request URLs
+tshark -r capture.pcap -Y "http.request" -T fields -e http.request.full_uri
+
+# Extract HTTP POST bodies (passwords, form data)
+tshark -r capture.pcap -Y "http.request.method == POST" -T fields -e urlencoded-form.value
+
+# Extract DNS query names (detects DNS data exfiltration)
+tshark -r capture.pcap -Y "dns.flags.response == 0" -T fields -e dns.qry.name
+
+# Extract raw data payload bytes
+tshark -r capture.pcap -T fields -e data.text
 ```
