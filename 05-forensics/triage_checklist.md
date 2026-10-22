@@ -1,162 +1,115 @@
-# Forensics Triage Checklist
+# Forensics Triage Handbook
 
-Standard triage procedure for forensics artifacts:
-
-```text
-[1. File Type and Strings] -> [2. Embedded Data Extraction] -> [3. Deep Protocol/Memory Analysis]
-```
+A structured, step-by-step triage guide for CTF forensics challenges.
 
 ---
 
-## 1. Initial File Inspection
+## Quick Navigation by Artifact Type
+1. [Phase 1: Universal 60-Second Initial Triage](#1-universal-60-second-initial-triage)
+2. [Phase 2: Images and Steganography](#2-images-and-steganography)
+3. [Phase 3: Corrupted Files and Header Repair](#3-corrupted-files-and-header-repair)
+4. [Phase 4: Compressed Archives](#4-compressed-archives)
+5. [Phase 5: Raw Bitstreams and Encoding (1s, 0s, Base64)](#5-raw-bitstreams-and-encoding)
+6. [Phase 6: Network Captures (Wireshark and Tshark)](#6-network-captures-pcap)
+7. [Phase 7: Memory Forensics (Volatility 3)](#7-memory-forensics-volatility-3)
+
+---
+
+## 1. Universal 60-Second Initial Triage
+Run these four commands on any unknown file before attempting complex tools:
+
 ```bash
+# 1. Determine actual file type (ignores file extension)
 file target_file
-exiftool target_file
+
+# 2. Search for plain text flags or passwords
 strings -n 8 target_file | grep -iE 'flag|ctf|key|pass'
+
+# 3. Inspect metadata and scan for hidden Base64 strings
+exiftool target_file
+exiftool target_file | grep -oE '[A-Za-z0-9+/]{20,}={0,2}'
+
+# 4. Check integrity or verify against provided hashes
+sha256sum target_file
+sha256sum * | grep "<TARGET_HASH>"
 ```
 
 ---
 
-## 2. Steganography Analysis
+## 2. Images and Steganography
 
 ### PNG Images
+PNG files often hide data in Least Significant Bits (LSB) or custom metadata chunks:
 ```bash
-zsteg -a image.png                   # Inspects all LSB channels
-pngcheck -v image.png                # Checks chunk integrity and hidden IHDR data
+# Check all LSB channels (primary PNG stego tool)
+zsteg -a image.png
+
+# Check for corrupted chunks or hidden text in IHDR/IDAT
+pngcheck -v image.png
 ```
 
-### JPG Images
+### JPG / JPEG Images
+JPG compression destroys LSB data. Data is usually appended to EOF or embedded with a password:
 ```bash
-binwalk -e image.jpg                 # Extracts embedded files
-steghide extract -sf image.jpg       # Extracts hidden data (empty password or wordlist)
+# Check for appended files or archives
+binwalk -e image.jpg
+
+# Extract steghide payload (press Enter for empty passphrase)
+steghide extract -sf image.jpg
+
+# Brute-force steghide password with rockyou wordlist
 stegseek image.jpg /usr/share/wordlists/rockyou.txt
 ```
 
 ### Audio Files (.wav, .mp3)
-1. Open file in Audacity.
-2. Select audio track dropdown menu next to the track name.
-3. Switch display from Waveform to Spectrogram to check for embedded text or QR codes.
+1. Open the file in Audacity.
+2. Click the dropdown arrow next to the track title.
+3. Select **Spectrogram** (look for text, numbers, or QR codes drawn in high frequencies).
 
 ---
 
-## 3. Magic Bytes and File Header Repair
+## 3. Corrupted Files and Header Repair
 
-Inspect the first 8 bytes of an unrecognized file with `xxd target_file | head`:
+If `file target_file` reports `data`, the magic bytes at the start of the file are corrupted.
 
-| File Type | Hex Signature | ASCII Representation |
+### Step 1: Check Current Header
+```bash
+xxd target_file | head -n 2
+```
+
+### Step 2: Standard Magic Bytes Reference Table
+| Format | Required Starting Hex Bytes | ASCII Indicator |
 | :--- | :--- | :--- |
 | **PNG** | `89 50 4E 47 0D 0A 1A 0A` | `.PNG....` |
-| **JPG** | `FF D8 FF E0` or `FF D8 FF E1` | `....` |
+| **JPG / JPEG** | `FF D8 FF E0` or `FF D8 FF E1` | `....` (JFIF or Exif) |
 | **GIF** | `47 49 46 38 39 61` | `GIF89a` |
 | **ZIP / DOCX** | `50 4B 03 04` | `PK..` |
 | **PDF** | `25 50 44 46` | `%PDF` |
-| **ELF (Linux Binary)** | `7F 45 4C 46` | `.ELF` |
+| **ELF (Linux)**| `7F 45 4C 46` | `.ELF` |
+| **GZIP** | `1F 8B 08` | `...` |
 
-Edit corrupted header bytes using `hexedit target_file` and save with `Ctrl+X`.
-
----
-
-## 4. Network PCAP Analysis (Wireshark)
-
-### Useful Display Filters
-```text
-http.request.method == "POST"       # Inspect submitted forms and credentials
-frame contains "flag"               # Case-sensitive search across packets
-frame matches "(?i)flag\{"          # Case-insensitive regex match
-tcp.stream eq 0                     # Follow full TCP conversation stream
-dns                                 # Check for DNS tunneling or anomalous queries
-icmp                                # Inspect data fields in ping requests
-```
-
-### File Extraction
-- Go to `File` > `Export Objects` > `HTTP...` to download files transferred over unencrypted connections.
-- Filter for `Authorization: Basic` to decode base64 HTTP authentication credentials.
-
----
-
-## 5. Memory Dump Analysis (Volatility 3)
+### Step 3: Repair Header
+Use a hex editor to overwrite the first corrupted bytes:
 ```bash
-# Process list and command-line arguments
-python3 vol.py -f memory.raw windows.pslist
-python3 vol.py -f memory.raw windows.cmdline
-
-# Scan for files on disk
-python3 vol.py -f memory.raw windows.filescan | grep -iE 'flag|desktop|secret'
-
-# Dump identified file from virtual address
-python3 vol.py -f memory.raw windows.dumpfiles --virtaddr <address>
-
-# Extract password hashes
-python3 vol.py -f memory.raw windows.hashdump
+hexedit target_file
+# Type the correct hex bytes, press Ctrl+X to save and exit.
 ```
 
 ---
 
-## 6. Raw Binary Bitstreams (1s and 0s Files)
+## 4. Compressed Archives
 
-When given a file containing raw ASCII `1` and `0` characters:
-
-### Quick CyberChef Steps
-1. Open [CyberChef](https://gchq.github.io/CyberChef/).
-2. For text: Add `From Binary` operation (Byte length: 8).
-3. For image rendering: Add `From Binary`, then add `Render Image` or click the Save icon in the Output pane to download as raw `.jpg` or `.png`.
-4. If output is unreadable, prepend `To Inverted Bitwise` or `XOR` with key `01`.
-
-### Python Parser (Text and QR Code Reconstruction)
-```python
-import math
-
-with open("data.bin", "r") as f:
-    bits = f.read().replace(" ", "").replace("\n", "").strip()
-
-# Check for ASCII text
-text = "".join([chr(int(bits[i:i+8], 2)) for i in range(0, len(bits) - (len(bits) % 8), 8)])
-print("ASCII output:", text[:100])
-
-# Check for Square Image or QR Code (Length is perfect square)
-side = math.isqrt(len(bits))
-if side * side == len(bits):
-    from PIL import Image
-    img = Image.new("1", (side, side))
-    # 1 is black (0), 0 is white (255)
-    img.putdata([0 if b == "1" else 255 for b in bits])
-    img.save("reconstructed.png")
-    print(f"Saved {side}x{side} image to reconstructed.png")
-```
-
----
-
-## 7. Checksum and Integrity Verification
-
-### Verify Files Against Known Hash
-```bash
-# Check single file
-sha256sum target_file
-md5sum target_file
-
-# Search all files in current directory matching a target SHA-256 hash
-sha256sum * | grep "<TARGET_HASH>"
-
-# Windows equivalent in PowerShell / CMD
-certutil -hashfile target_file SHA256
-Get-FileHash target_file -Algorithm SHA256
-```
-
----
-
-## 8. Compressed Archive Decompression
-
-When encountering unknown compressed archives:
+When given an archive or when `binwalk` extracts compressed streams:
 
 ```bash
-# Gzip (.gz)
-gzip -dc file.gz > uncompressed_output
+# Gzip archive (.gz)
+gzip -dc file.gz > extracted_content
 
-# Tar archives (.tar, .tar.gz, .tgz)
+# Tar archive (.tar, .tar.gz, .tgz)
 tar -xvf file.tar
 tar -xvzf file.tar.gz
 
-# 7-Zip (supports 7z, rar, zip, iso, dmg, bz2)
+# 7-Zip (handles zip, 7z, rar, bz2, iso)
 7z x file.7z
 
 # Bzip2 (.bz2)
@@ -168,47 +121,100 @@ xz -d file.xz
 
 ---
 
-## 9. Recursive Base64 and Metadata Extraction
+## 5. Raw Bitstreams and Encoding
 
-### Automated Metadata Base64 Scanner
-Extract strings from metadata that match Base64 patterns (20 or more characters):
-```bash
-exiftool target_file | grep -oE '[A-Za-z0-9+/]{20,}={0,2}'
-```
+### 1s and 0s Files (.bin or .txt)
+When given a file containing only ASCII `1` and `0` characters:
 
-### Recursive Base64 Decoder (Python One-Liner)
-When data is encoded multiple times in Base64:
+1. **Option A: Plain Text Conversion (CyberChef)**
+   - Open CyberChef.
+   - Add `From Binary` operation (Byte length: 8).
+   - If output is unreadable, prepend `To Inverted Bitwise` or `XOR` with key `01`.
+
+2. **Option B: Reconstruct Square Image / QR Code (Python)**
+   If the bit count is a square number ($21^2, 25^2, 29^2, 33^2$):
+   ```python
+   import math
+   from PIL import Image
+
+   with open("data.bin", "r") as f:
+       bits = f.read().replace(" ", "").replace("\n", "").strip()
+
+   side = math.isqrt(len(bits))
+   if side * side == len(bits):
+       img = Image.new("1", (side, side))
+       # 1 = black (0), 0 = white (255)
+       img.putdata([0 if b == "1" else 255 for b in bits])
+       img.save("reconstructed_qr.png")
+       print(f"Generated {side}x{side} image: reconstructed_qr.png")
+   ```
+
+### Recursive Base64 Decoder
+When a string or password is encoded through multiple layers of Base64:
 ```python
 import base64
 
-data = "Vm0wd2QyUXlVWGxWV0d4V1YwZDRWMVl3WkRSV01WbDNXa2M1VjFadGNGbFZNakExVjBaS2RHVkdXbGRYYlVaclVteHplRll5U2tWVWJHaG9UVlZ3VjFacWFFOVZNalZUVld4V1ExWnVRbFZXYmtwb1VqQmFZV1JIVmtOQlJFWjVXVmM1YWxkcmVGZFdSVXBvVmtSS1QyUkVUWGxUUmxweVZtMDFRMVp1..."
+data = "PASTE_ENCODED_STRING_HERE"
 
 while True:
     try:
-        decoded = base64.b64decode(data).decode('utf-8')
-        data = decoded
+        data = base64.b64decode(data).decode('utf-8')
         print(f"Decoded layer: {data}")
     except Exception:
-        print(f"Final plaintext: {data}")
+        print(f"Final result: {data}")
         break
 ```
 
 ---
 
-## 10. Tshark Fast Data Extraction from PCAP
+## 6. Network Captures (.pcap / .pcapng)
 
-Extract transferred data directly from terminal without navigating Wireshark GUI:
+### Essential Wireshark Display Filters
+```text
+http.request.method == "POST"       # Submitted login forms and passwords
+frame contains "flag"               # Search payload text (case-sensitive)
+frame matches "(?i)flag\{"          # Search payload text with regex (case-insensitive)
+tcp.stream eq 0                     # Follow full TCP communication stream
+dns.flags.response == 0             # Inspect outbound DNS requests (DNS exfiltration)
+icmp                                # Check ICMP ping payloads for hidden data
+```
 
+### File Extraction in Wireshark
+- Go to `File` > `Export Objects` > `HTTP...` to export transferred documents and files.
+
+### Fast Command-Line Extraction (Tshark)
+Extract fields directly without opening the Wireshark GUI:
 ```bash
-# Extract HTTP request URLs
+# Extract full URLs requested over HTTP
 tshark -r capture.pcap -Y "http.request" -T fields -e http.request.full_uri
 
-# Extract HTTP POST bodies (passwords, form data)
+# Extract HTTP POST bodies (submitted credentials)
 tshark -r capture.pcap -Y "http.request.method == POST" -T fields -e urlencoded-form.value
 
-# Extract DNS query names (detects DNS data exfiltration)
+# Extract DNS queried domains
 tshark -r capture.pcap -Y "dns.flags.response == 0" -T fields -e dns.qry.name
 
 # Extract raw data payload bytes
 tshark -r capture.pcap -T fields -e data.text
+```
+
+---
+
+## 7. Memory Forensics (Volatility 3)
+
+For memory dump files (`.raw`, `.dmp`, `.vmem`):
+
+```bash
+# 1. List running processes and command line arguments
+python3 vol.py -f memory.raw windows.pslist
+python3 vol.py -f memory.raw windows.cmdline
+
+# 2. Search for flag, desktop files, or configuration secrets
+python3 vol.py -f memory.raw windows.filescan | grep -iE 'flag|desktop|secret|pass'
+
+# 3. Dump a specific file using its virtual memory address
+python3 vol.py -f memory.raw windows.dumpfiles --virtaddr <VIRTUAL_ADDRESS>
+
+# 4. Extract Windows NTLM password hashes
+python3 vol.py -f memory.raw windows.hashdump
 ```
