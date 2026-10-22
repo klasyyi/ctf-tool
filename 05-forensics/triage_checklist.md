@@ -89,3 +89,36 @@ python3 vol.py -f memory.raw windows.dumpfiles --virtaddr <address>
 # Extract password hashes
 python3 vol.py -f memory.raw windows.hashdump
 ```
+
+---
+
+## 6. Raw Binary Bitstreams (1s and 0s Files)
+
+When given a file containing raw ASCII `1` and `0` characters:
+
+### Quick CyberChef Steps
+1. Open [CyberChef](https://gchq.github.io/CyberChef/).
+2. For text: Add `From Binary` operation (Byte length: 8).
+3. If output is unreadable, prepend `To Inverted Bitwise` or `XOR` with key `01`.
+
+### Python Parser (Text and QR Code Reconstruction)
+```python
+import math
+
+with open("data.bin", "r") as f:
+    bits = f.read().replace(" ", "").replace("\n", "").strip()
+
+# Check for ASCII text
+text = "".join([chr(int(bits[i:i+8], 2)) for i in range(0, len(bits) - (len(bits) % 8), 8)])
+print("ASCII output:", text[:100])
+
+# Check for Square Image or QR Code (Length is perfect square)
+side = math.isqrt(len(bits))
+if side * side == len(bits):
+    from PIL import Image
+    img = Image.new("1", (side, side))
+    # 1 is black (0), 0 is white (255)
+    img.putdata([0 if b == "1" else 255 for b in bits])
+    img.save("reconstructed.png")
+    print(f"Saved {side}x{side} image to reconstructed.png")
+```
