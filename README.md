@@ -4,6 +4,7 @@ Reference cheat sheets, solver scripts, and payloads for CTF competitions.
 
 ## Table of Contents
 - [01-web/web_payloads.md](01-web/web_payloads.md): SSTI, SQLi, LFI wrappers, file upload bypass, and command injection.
+- [01-web/speed_tools.md](01-web/speed_tools.md): High-speed tools (ffuf, sqlmap, Python sessions) bypassing Burp Community limits.
 - [02-pwn/template_pwntools.py](02-pwn/template_pwntools.py): Pwntools template for local and remote buffer overflows.
 - [02-pwn/pwn_cheatsheet.md](02-pwn/pwn_cheatsheet.md): GDB-pwndbg commands, cyclic offset calculation, ret2win, and ROP.
 - [03-reverse/reverse_cheatsheet.md](03-reverse/reverse_cheatsheet.md): Ghidra shortcuts, ltrace, strace, UPX unpacking, and pyc decompilation.
